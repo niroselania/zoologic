@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import unicodedata
+import json
 from io import BytesIO
 from datetime import date, datetime, time
 from pathlib import Path
@@ -18,6 +19,7 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", BASE_DIR / "data"))
 UPLOAD_DIR = DATA_DIR / "uploads"
 BACKUP_DIR = DATA_DIR / "backups"
 CURRENT_FILE = DATA_DIR / "zoologic_actual.xlsx"
+HISTORY_FILE = DATA_DIR / "historial_cambios.jsonl"
 ALLOWED_EXTENSIONS = {".xlsx", ".xlsm"}
 
 app = Flask(__name__)
@@ -120,6 +122,11 @@ def find_header(headers: list[dict[str, Any]], *terms: str) -> dict[str, Any] | 
     return None
 
 
+def value_for(headers: list[dict[str, Any]], values: dict[str, Any], *terms: str) -> Any:
+    header = find_header(headers, *terms)
+    return values.get(header["key"]) if header else None
+
+
 def row_remote_info(headers: list[dict[str, Any]], values: dict[str, Any]) -> dict[str, Any]:
     remote_header = find_header(headers, "escritorio", "remoto")
     password_header = find_header(headers, "password") or find_header(headers, "contrasena")
@@ -129,6 +136,114 @@ def row_remote_info(headers: list[dict[str, Any]], values: dict[str, Any]) -> di
         "available": bool(str(remote_value or "").strip()),
         "address": remote_value,
         "password": password_value,
+    }
+
+
+def row_access_summary(headers: list[dict[str, Any]], values: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "puesto": value_for(headers, values, "puesto"),
+        "usuario": value_for(headers, values, "usuario"),
+        "serie": value_for(headers, values, "serie"),
+        "canal": value_for(headers, values, "canal"),
+        "estado": value_for(headers, values, "estado"),
+        "sitio": value_for(headers, values, "sitio") or value_for(headers, values, "ubicacion"),
+        "escritorio_remoto": value_for(headers, values, "escritorio", "remoto"),
+        "password": value_for(headers, values, "password") or value_for(headers, values, "contrasena"),
+    }
+
+
+def row_issues(
+    headers: list[dict[str, Any]],
+    values: dict[str, Any],
+    duplicate_series: set[str],
+) -> list[str]:
+    issues = []
+    usuario = value_for(headers, values, "usuario")
+    puesto = value_for(headers, values, "puesto")
+    serie = value_for(headers, values, "serie")
+    estado = value_for(headers, values, "estado")
+    remote = value_for(headers, values, "escritorio", "remoto")
+    password = value_for(headers, values, "password") or value_for(headers, values, "contrasena")
+
+    if find_header(headers, "usuario") and not str(usuario or "").strip():
+        issues.append("Usuario vacio")
+    if find_header(headers, "puesto") and not str(puesto or "").strip():
+        issues.append("Puesto vacio")
+    if find_header(headers, "escritorio", "remoto") and not str(remote or "").strip():
+        issues.append("Escritorio remoto vacio")
+    if (find_header(headers, "password") or find_header(headers, "contrasena")) and not str(password or "").strip():
+        issues.append("Password vacio")
+    if str(serie or "").strip() and str(serie).strip() in duplicate_series:
+        issues.append("Serie duplicada")
+    if str(estado or "").strip() and normalize_text(estado) not in {"activado", "activo"}:
+        issues.append(f"Estado: {estado}")
+
+    return issues
+
+
+def build_dashboard(
+    headers: list[dict[str, Any]],
+    all_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    series: dict[str, int] = {}
+    canales: dict[str, int] = {}
+    estados: dict[str, int] = {}
+    sitios: dict[str, int] = {}
+
+    for row in all_rows:
+        values = row["values"]
+        serie = str(value_for(headers, values, "serie") or "").strip()
+        canal = str(value_for(headers, values, "canal") or "").strip()
+        estado = str(value_for(headers, values, "estado") or "").strip()
+        sitio = str(value_for(headers, values, "sitio") or value_for(headers, values, "ubicacion") or "").strip()
+        if serie:
+            series[serie] = series.get(serie, 0) + 1
+        if canal:
+            canales[canal] = canales.get(canal, 0) + 1
+        if estado:
+            estados[estado] = estados.get(estado, 0) + 1
+        if sitio:
+            sitios[sitio] = sitios.get(sitio, 0) + 1
+
+    duplicate_series = {serie for serie, count in series.items() if count > 1}
+    review_rows = []
+    issue_totals: dict[str, int] = {}
+    for row in all_rows:
+        issues = row_issues(headers, row["values"], duplicate_series)
+        for issue in issues:
+            issue_totals[issue] = issue_totals.get(issue, 0) + 1
+        if issues:
+            summary = row_access_summary(headers, row["values"])
+            review_rows.append(
+                {
+                    "row_id": row["row_id"],
+                    "issues": issues,
+                    "puesto": summary["puesto"],
+                    "usuario": summary["usuario"],
+                    "serie": summary["serie"],
+                    "estado": summary["estado"],
+                }
+            )
+
+    def top_items(items: dict[str, int], limit: int = 8) -> list[dict[str, Any]]:
+        return [
+            {"name": name, "count": count}
+            for name, count in sorted(items.items(), key=lambda item: (-item[1], item[0]))[:limit]
+        ]
+
+    return {
+        "total": len(all_rows),
+        "active": sum(1 for row in all_rows if normalize_text(value_for(headers, row["values"], "estado")) in {"activado", "activo"}),
+        "missing_user": issue_totals.get("Usuario vacio", 0),
+        "missing_remote": issue_totals.get("Escritorio remoto vacio", 0),
+        "missing_password": issue_totals.get("Password vacio", 0),
+        "duplicate_series": len(duplicate_series),
+        "issue_count": sum(issue_totals.values()),
+        "issue_totals": top_items(issue_totals, 10),
+        "channels": top_items(canales),
+        "states": top_items(estados),
+        "sites": top_items(sitios),
+        "review_rows": review_rows[:30],
     }
 
 
@@ -146,7 +261,7 @@ def sheet_names(workbook) -> list[str]:
     return [sheet.title for sheet in workbook.worksheets]
 
 
-def rows_from_sheet(sheet_name: str | None = None, search: str = "") -> dict[str, Any]:
+def rows_from_sheet(sheet_name: str | None = None, search: str = "", search_mode: str = "targeted") -> dict[str, Any]:
     workbook = open_workbook()
     try:
         selected_sheet = sheet_name if sheet_name in workbook.sheetnames else preferred_sheet_name(workbook)
@@ -155,6 +270,7 @@ def rows_from_sheet(sheet_name: str | None = None, search: str = "") -> dict[str
         headers = read_headers(sheet, header_row)
         search_headers = searchable_headers(headers)
         search_key = normalize_text(search)
+        all_rows = []
         rows = []
 
         for row_number in range(header_row + 1, sheet.max_row + 1):
@@ -169,8 +285,16 @@ def rows_from_sheet(sheet_name: str | None = None, search: str = "") -> dict[str
             if not has_value:
                 continue
 
+            row_payload = {
+                "row_id": row_number,
+                "values": values,
+                "remote_desktop": row_remote_info(headers, values),
+                "access_summary": row_access_summary(headers, values),
+            }
+            all_rows.append(row_payload)
+
             if search_key:
-                haystack_headers = search_headers or headers
+                haystack_headers = headers if search_mode == "global" else search_headers or headers
                 haystack = " | ".join(
                     normalize_text(sheet.cell(row_number, header["column"]).value)
                     for header in haystack_headers
@@ -178,13 +302,7 @@ def rows_from_sheet(sheet_name: str | None = None, search: str = "") -> dict[str
                 if search_key not in haystack:
                     continue
 
-            rows.append(
-                {
-                    "row_id": row_number,
-                    "values": values,
-                    "remote_desktop": row_remote_info(headers, values),
-                }
-            )
+            rows.append(row_payload)
 
         return {
             "filename": CURRENT_FILE.name,
@@ -193,8 +311,10 @@ def rows_from_sheet(sheet_name: str | None = None, search: str = "") -> dict[str
             "header_row": header_row,
             "headers": headers,
             "search_columns": [header["label"] for header in search_headers],
+            "search_mode": search_mode,
+            "dashboard": build_dashboard(headers, all_rows),
             "rows": rows,
-            "total_rows": max(sheet.max_row - header_row, 0),
+            "total_rows": len(all_rows),
             "filtered_rows": len(rows),
         }
     finally:
@@ -205,6 +325,33 @@ def make_backup() -> None:
     if CURRENT_FILE.exists():
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         shutil.copy2(CURRENT_FILE, BACKUP_DIR / f"zoologic_backup_{stamp}.xlsx")
+
+
+def append_history(sheet_name: str, row_id: int, changes: list[dict[str, Any]]) -> None:
+    if not changes:
+        return
+    ensure_dirs()
+    entry = {
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "sheet": sheet_name,
+        "row_id": row_id,
+        "changes": changes,
+    }
+    with HISTORY_FILE.open("a", encoding="utf-8") as file:
+        file.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def read_history(limit: int = 80) -> list[dict[str, Any]]:
+    if not HISTORY_FILE.exists():
+        return []
+    lines = HISTORY_FILE.read_text(encoding="utf-8").splitlines()
+    entries = []
+    for line in lines[-limit:]:
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return list(reversed(entries))
 
 
 @app.get("/")
@@ -260,9 +407,14 @@ def upload_file():
 @app.get("/api/rows")
 def rows():
     try:
-        return jsonify(rows_from_sheet(request.args.get("sheet"), request.args.get("q", "")))
+        return jsonify(rows_from_sheet(request.args.get("sheet"), request.args.get("q", ""), request.args.get("mode", "targeted")))
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 404
+
+
+@app.get("/api/history")
+def history():
+    return jsonify({"history": read_history()})
 
 
 @app.patch("/api/rows/<int:row_id>")
@@ -292,12 +444,23 @@ def update_row(row_id: int):
         if unknown:
             return jsonify({"error": f"Columnas desconocidas: {', '.join(unknown)}"}), 400
 
+        changes = []
+        for key, value in values.items():
+            old_value = serialize_value(sheet.cell(row=row_id, column=key_to_column[key]).value)
+            new_value = value if value != "" else None
+            if str(old_value or "") != str(new_value or ""):
+                changes.append({"field": key, "old": old_value, "new": new_value})
+
+        if not changes:
+            return jsonify({"ok": True, "changed": False})
+
         make_backup()
         for key, value in values.items():
             sheet.cell(row=row_id, column=key_to_column[key]).value = value if value != "" else None
 
         workbook.save(CURRENT_FILE)
-        return jsonify({"ok": True})
+        append_history(selected_sheet, row_id, changes)
+        return jsonify({"ok": True, "changed": True})
     finally:
         workbook.close()
 

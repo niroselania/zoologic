@@ -31,6 +31,13 @@ Los archivos cargados y backups quedan en el volumen `zoologic_data`.
 - Editar una fila desde la tabla si hace falta.
 - Usar `Conectar RD` cuando la fila tenga dato en la columna `Escritorio remoto`.
 - Copiar la password cuando la fila tenga dato en la columna `Password`.
+- Ver dashboard automatico de filas, activas, faltantes y duplicados.
+- Revisar alertas de datos incompletos o raros.
+- Buscar solo por usuario/puesto o en toda la fila.
+- Copiar el acceso completo de una fila para soporte.
+- Consultar el historial de cambios realizados desde la app.
 - Descargar el Excel actualizado.
 
 El boton `Conectar RD` genera un archivo `.rdp`. En Windows, al abrir ese archivo se inicia la conexion con Escritorio Remoto o Windows App si esta asociada a ese formato.
+
+El historial se guarda en `/app/data/historial_cambios.jsonl`, dentro del volumen `zoologic_data`.

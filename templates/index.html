@@ -161,6 +161,106 @@
     .stat strong { display: block; font-size: 23px; }
     .stat span { color: var(--muted); font-size: 12px; }
 
+    .mode {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .mode label {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      background: #fff;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .mode input {
+      width: auto;
+      height: auto;
+    }
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(116px, 1fr));
+      gap: 10px;
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfdff;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .insights {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .insight-box {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .insight-title {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      color: #334155;
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .insight-list {
+      display: grid;
+      gap: 0;
+      max-height: 184px;
+      overflow: auto;
+    }
+
+    .insight-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      padding: 9px 12px;
+      border-bottom: 1px solid #edf2f7;
+      color: #334155;
+      font-size: 13px;
+    }
+
+    .insight-item:last-child { border-bottom: 0; }
+    .insight-item b { color: var(--text); }
+    .insight-empty { padding: 14px 12px; color: var(--muted); font-size: 13px; }
+
     .message {
       display: none;
       margin-top: 14px;
@@ -261,7 +361,7 @@
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
-      min-width: 260px;
+      min-width: 390px;
     }
 
     .empty {
@@ -273,6 +373,8 @@
     @media (max-width: 900px) {
       .top { align-items: flex-start; flex-direction: column; padding: 16px 0; }
       .layout { grid-template-columns: 1fr; }
+      .dashboard { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+      .insights { grid-template-columns: 1fr; }
       .table-wrap { max-height: 60vh; }
     }
   </style>
@@ -300,6 +402,10 @@
         <p class="label">Hoja y busqueda</p>
         <select id="sheetSelect"></select>
         <input id="searchInput" type="search" placeholder="Buscar usuario o puesto">
+        <div class="mode">
+          <label><input type="radio" name="searchMode" value="targeted" checked> Usuario/Puesto</label>
+          <label><input type="radio" name="searchMode" value="global"> Toda la fila</label>
+        </div>
         <button id="searchButton" type="button">Buscar</button>
         <button id="clearButton" class="secondary" type="button">Ver todo</button>
       </div>
@@ -316,6 +422,17 @@
       <div class="toolbar">
         <span id="sheetBadge" class="badge">Sin planilla</span>
         <div id="hint" class="sub">Subi un Excel para empezar.</div>
+      </div>
+      <div id="dashboard" class="dashboard" hidden></div>
+      <div id="insights" class="insights" hidden>
+        <div class="insight-box">
+          <div class="insight-title">Alertas a revisar</div>
+          <div id="reviewList" class="insight-list"></div>
+        </div>
+        <div class="insight-box">
+          <div class="insight-title">Ultimos cambios</div>
+          <div id="historyList" class="insight-list"></div>
+        </div>
       </div>
       <div class="table-wrap">
         <div id="emptyState" class="empty">Todavia no hay datos para mostrar.</div>
@@ -334,6 +451,10 @@
     const searchInput = document.querySelector("#searchInput");
     const searchButton = document.querySelector("#searchButton");
     const clearButton = document.querySelector("#clearButton");
+    const dashboard = document.querySelector("#dashboard");
+    const insights = document.querySelector("#insights");
+    const reviewList = document.querySelector("#reviewList");
+    const historyList = document.querySelector("#historyList");
     const message = document.querySelector("#message");
     const totalRows = document.querySelector("#totalRows");
     const filteredRows = document.querySelector("#filteredRows");
@@ -377,6 +498,75 @@
       sheetSelect.value = selected || previous || sheetSelect.options[0]?.value || "";
     }
 
+    function currentSearchMode() {
+      return document.querySelector('input[name="searchMode"]:checked')?.value || "targeted";
+    }
+
+    function renderDashboard(summary) {
+      if (!summary) {
+        dashboard.hidden = true;
+        insights.hidden = true;
+        return;
+      }
+
+      dashboard.hidden = false;
+      insights.hidden = false;
+      const metrics = [
+        ["Total", summary.total ?? 0],
+        ["Activas", summary.active ?? 0],
+        ["Sin usuario", summary.missing_user ?? 0],
+        ["Sin RD", summary.missing_remote ?? 0],
+        ["Sin password", summary.missing_password ?? 0],
+        ["Series duplicadas", summary.duplicate_series ?? 0],
+      ];
+      dashboard.innerHTML = metrics.map(([label, value]) => `<div class="metric"><strong>${value}</strong><span>${escapeHtml(label)}</span></div>`).join("");
+
+      const reviewRows = summary.review_rows || [];
+      reviewList.innerHTML = reviewRows.length
+        ? reviewRows.map(row => {
+            const name = row.usuario || row.puesto || `Fila ${row.row_id}`;
+            const issues = row.issues.join(", ");
+            return `<div class="insight-item"><span><b>${escapeHtml(name)}</b><br>${escapeHtml(issues)}</span><span>Fila ${row.row_id}</span></div>`;
+          }).join("")
+        : `<div class="insight-empty">No hay alertas para esta hoja.</div>`;
+    }
+
+    function renderHistory(entries) {
+      historyList.innerHTML = entries.length
+        ? entries.slice(0, 12).map(entry => {
+            const fields = entry.changes.map(change => change.field).join(", ");
+            return `<div class="insight-item"><span><b>${escapeHtml(entry.sheet)}</b><br>${escapeHtml(fields)}</span><span>Fila ${entry.row_id}</span></div>`;
+          }).join("")
+        : `<div class="insight-empty">Todavia no hay cambios registrados.</div>`;
+    }
+
+    async function loadHistory() {
+      try {
+        const data = await api("/api/history");
+        renderHistory(data.history || []);
+      } catch {
+        renderHistory([]);
+      }
+    }
+
+    function buildAccessText(row) {
+      const summary = row.access_summary || {};
+      const lines = [
+        ["Puesto", summary.puesto],
+        ["Usuario", summary.usuario],
+        ["Password", summary.password],
+        ["Escritorio remoto", summary.escritorio_remoto],
+        ["Serie", summary.serie],
+        ["Canal", summary.canal],
+        ["Estado", summary.estado],
+        ["Sitio", summary.sitio],
+      ];
+      return lines
+        .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "")
+        .map(([label, value]) => `${label}: ${value}`)
+        .join("\\n");
+    }
+
     function render(data) {
       currentHeaders = data.headers || [];
       currentSheet = data.sheet || "";
@@ -386,6 +576,7 @@
       sheetBadge.textContent = currentSheet ? `Hoja: ${currentSheet}` : "Sin planilla";
       const searchCols = data.search_columns?.length ? data.search_columns.join(" / ") : "todas las columnas";
       hint.textContent = data.filename ? `Archivo activo: ${data.filename}. Busca en: ${searchCols}` : "Subi un Excel para empezar.";
+      renderDashboard(data.dashboard);
 
       if (!currentHeaders.length || !data.rows?.length) {
         table.hidden = true;
@@ -409,7 +600,11 @@
         const copyButton = password
           ? `<button class="copy" type="button" data-copy-password="${escapeAttr(password)}">Copiar password</button>`
           : "";
-        return `<tr>${cells}<td><div class="actions"><button type="button" data-save="${row.row_id}">Guardar</button>${rdpButton}${copyButton}</div></td></tr>`;
+        const accessText = buildAccessText(row);
+        const accessButton = accessText
+          ? `<button class="copy" type="button" data-copy-access="${escapeAttr(accessText)}">Copiar acceso</button>`
+          : "";
+        return `<tr>${cells}<td><div class="actions"><button type="button" data-save="${row.row_id}">Guardar</button>${rdpButton}${copyButton}${accessButton}</div></td></tr>`;
       }).join("");
     }
 
@@ -418,8 +613,10 @@
         const params = new URLSearchParams();
         if (sheetSelect.value) params.set("sheet", sheetSelect.value);
         if (searchInput.value.trim()) params.set("q", searchInput.value.trim());
+        params.set("mode", currentSearchMode());
         const data = await api(`/api/rows?${params}`);
         render(data);
+        loadHistory();
       } catch (error) {
         showMessage(error.message, true);
       }
@@ -434,6 +631,7 @@
         body: JSON.stringify({ sheet: currentSheet, values })
       });
       showMessage("Fila guardada en el Excel.");
+      loadHistory();
     }
 
     uploadForm.addEventListener("submit", async event => {
@@ -449,6 +647,7 @@
         const data = await api("/api/upload", { method: "POST", body: formData });
         searchInput.value = "";
         render(data);
+        loadHistory();
         showMessage("Planilla cargada correctamente.");
       } catch (error) {
         showMessage(error.message, true);
@@ -485,6 +684,17 @@
         return;
       }
 
+      const copyAccessButton = event.target.closest("button[data-copy-access]");
+      if (copyAccessButton) {
+        try {
+          await navigator.clipboard.writeText(copyAccessButton.dataset.copyAccess);
+          showMessage("Acceso completo copiado al portapapeles.");
+        } catch {
+          showMessage(copyAccessButton.dataset.copyAccess);
+        }
+        return;
+      }
+
       const button = event.target.closest("button[data-save]");
       if (!button) return;
       button.disabled = true;
@@ -514,6 +724,7 @@
     api("/api/status")
       .then(status => status.loaded ? loadRows() : null)
       .catch(() => {});
+    loadHistory();
   </script>
 </body>
 </html>
