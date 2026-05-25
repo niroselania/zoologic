@@ -1,0 +1,12 @@
+services:
+  zoologic-consulta:
+    build: .
+    container_name: zoologic-consulta
+    ports:
+      - "8100:8000"
+    volumes:
+      - zoologic_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  zoologic_data:

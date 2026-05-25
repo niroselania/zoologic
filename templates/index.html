@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zoologic - Consulta de Planilla</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --surface: #ffffff;
+      --soft: #edf2f5;
+      --text: #17202a;
+      --muted: #607080;
+      --line: #d7e0e7;
+      --accent: #2563eb;
+      --accent-dark: #1d4ed8;
+      --ok-bg: #ecfdf3;
+      --ok: #166534;
+      --error-bg: #fff1f2;
+      --error: #be123c;
+      --shadow: 0 16px 42px rgba(23, 32, 42, .10);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .wrap {
+      width: min(1320px, calc(100vw - 32px));
+      margin: 0 auto;
+    }
+
+    .top {
+      min-height: 78px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .sub {
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 6px;
+    }
+
+    .button, button {
+      min-height: 40px;
+      border: 0;
+      border-radius: 6px;
+      padding: 0 14px;
+      background: var(--accent);
+      color: #fff;
+      font: inherit;
+      font-weight: 750;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-decoration: none;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .button:hover, button:hover { background: var(--accent-dark); }
+    button.secondary { background: #475569; }
+    button.secondary:hover { background: #334155; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 18px;
+      padding: 22px 0;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .side {
+      padding: 18px;
+      align-self: start;
+    }
+
+    .main { min-width: 0; overflow: hidden; }
+
+    .label {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .drop {
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px dashed #9aa9b7;
+      background: var(--soft);
+      display: grid;
+      gap: 12px;
+    }
+
+    input, select {
+      width: 100%;
+      height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0 12px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+    }
+
+    .controls {
+      display: grid;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+    }
+
+    .stat strong { display: block; font-size: 23px; }
+    .stat span { color: var(--muted); font-size: 12px; }
+
+    .message {
+      display: none;
+      margin-top: 14px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      background: var(--ok-bg);
+      color: var(--ok);
+      font-size: 14px;
+    }
+
+    .message.error {
+      background: var(--error-bg);
+      color: var(--error);
+    }
+
+    .toolbar {
+      min-height: 64px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .badge {
+      min-height: 28px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: #eff6ff;
+      color: var(--accent-dark);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      max-height: calc(100vh - 164px);
+    }
+
+    table {
+      border-collapse: separate;
+      border-spacing: 0;
+      width: 100%;
+      min-width: 1180px;
+    }
+
+    th, td {
+      padding: 8px;
+      border-bottom: 1px solid var(--line);
+      border-right: 1px solid var(--line);
+      background: #fff;
+      vertical-align: top;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #f8fafc;
+      color: #475569;
+      text-align: left;
+      font-size: 12px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    th:first-child, td:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 3;
+      border-left: 0;
+    }
+
+    th:first-child { background: #eef4ff; }
+    td:first-child { background: #fbfdff; }
+
+    td input {
+      min-width: 148px;
+      height: 36px;
+      padding: 0 8px;
+      border: 1px solid transparent;
+      border-radius: 5px;
+      background: transparent;
+    }
+
+    td input:focus {
+      outline: 2px solid rgba(37, 99, 235, .16);
+      border-color: #8db4ff;
+      background: #fff;
+    }
+
+    .empty {
+      padding: 44px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    @media (max-width: 900px) {
+      .top { align-items: flex-start; flex-direction: column; padding: 16px 0; }
+      .layout { grid-template-columns: 1fr; }
+      .table-wrap { max-height: 60vh; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap top">
+      <div>
+        <h1>Zoologic - Consulta de Planilla</h1>
+        <div class="sub">Busqueda por usuario o puesto, con vista completa de la fila.</div>
+      </div>
+      <a class="button" href="/api/download">Descargar Excel actualizado</a>
+    </div>
+  </header>
+
+  <main class="wrap layout">
+    <aside class="panel side">
+      <p class="label">Planilla</p>
+      <form id="uploadForm" class="drop">
+        <input id="fileInput" type="file" accept=".xlsx,.xlsm">
+        <button type="submit">Subir Excel</button>
+      </form>
+
+      <div class="controls">
+        <p class="label">Hoja y busqueda</p>
+        <select id="sheetSelect"></select>
+        <input id="searchInput" type="search" placeholder="Buscar usuario o puesto">
+        <button id="searchButton" type="button">Buscar</button>
+        <button id="clearButton" class="secondary" type="button">Ver todo</button>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><strong id="totalRows">0</strong><span>Filas de la hoja</span></div>
+        <div class="stat"><strong id="filteredRows">0</strong><span>Resultado</span></div>
+      </div>
+
+      <div id="message" class="message"></div>
+    </aside>
+
+    <section class="panel main">
+      <div class="toolbar">
+        <span id="sheetBadge" class="badge">Sin planilla</span>
+        <div id="hint" class="sub">Subi un Excel para empezar.</div>
+      </div>
+      <div class="table-wrap">
+        <div id="emptyState" class="empty">Todavia no hay datos para mostrar.</div>
+        <table id="dataTable" hidden>
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const uploadForm = document.querySelector("#uploadForm");
+    const fileInput = document.querySelector("#fileInput");
+    const sheetSelect = document.querySelector("#sheetSelect");
+    const searchInput = document.querySelector("#searchInput");
+    const searchButton = document.querySelector("#searchButton");
+    const clearButton = document.querySelector("#clearButton");
+    const message = document.querySelector("#message");
+    const totalRows = document.querySelector("#totalRows");
+    const filteredRows = document.querySelector("#filteredRows");
+    const sheetBadge = document.querySelector("#sheetBadge");
+    const hint = document.querySelector("#hint");
+    const table = document.querySelector("#dataTable");
+    const thead = table.querySelector("thead");
+    const tbody = table.querySelector("tbody");
+    const emptyState = document.querySelector("#emptyState");
+
+    let currentHeaders = [];
+    let currentSheet = "";
+    let pendingTimers = new Map();
+
+    function showMessage(text, isError = false) {
+      message.textContent = text;
+      message.classList.toggle("error", isError);
+      message.style.display = "block";
+      window.clearTimeout(showMessage.timer);
+      showMessage.timer = window.setTimeout(() => message.style.display = "none", 4200);
+    }
+
+    async function api(url, options = {}) {
+      const response = await fetch(url, options);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Ocurrio un error.");
+      return data;
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value).replace(/`/g, "&#096;");
+    }
+
+    function updateSheetOptions(sheets, selected) {
+      const previous = sheetSelect.value;
+      sheetSelect.innerHTML = (sheets || []).map(sheet => `<option value="${escapeAttr(sheet)}">${escapeHtml(sheet)}</option>`).join("");
+      sheetSelect.value = selected || previous || sheetSelect.options[0]?.value || "";
+    }
+
+    function render(data) {
+      currentHeaders = data.headers || [];
+      currentSheet = data.sheet || "";
+      updateSheetOptions(data.sheets, currentSheet);
+      totalRows.textContent = data.total_rows ?? 0;
+      filteredRows.textContent = data.filtered_rows ?? 0;
+      sheetBadge.textContent = currentSheet ? `Hoja: ${currentSheet}` : "Sin planilla";
+      const searchCols = data.search_columns?.length ? data.search_columns.join(" / ") : "todas las columnas";
+      hint.textContent = data.filename ? `Archivo activo: ${data.filename}. Busca en: ${searchCols}` : "Subi un Excel para empezar.";
+
+      if (!currentHeaders.length || !data.rows?.length) {
+        table.hidden = true;
+        emptyState.hidden = false;
+        emptyState.textContent = currentHeaders.length ? "No hay resultados para esa busqueda." : "Todavia no hay datos para mostrar.";
+        return;
+      }
+
+      emptyState.hidden = true;
+      table.hidden = false;
+      thead.innerHTML = `<tr>${currentHeaders.map(header => `<th>${escapeHtml(header.label)}</th>`).join("")}<th>Accion</th></tr>`;
+      tbody.innerHTML = data.rows.map(row => {
+        const cells = currentHeaders.map(header => {
+          const value = row.values[header.key] ?? "";
+          return `<td><input type="text" data-row="${row.row_id}" data-key="${escapeAttr(header.key)}" value="${escapeAttr(value)}"></td>`;
+        }).join("");
+        return `<tr>${cells}<td><button type="button" data-save="${row.row_id}">Guardar</button></td></tr>`;
+      }).join("");
+    }
+
+    async function loadRows() {
+      try {
+        const params = new URLSearchParams();
+        if (sheetSelect.value) params.set("sheet", sheetSelect.value);
+        if (searchInput.value.trim()) params.set("q", searchInput.value.trim());
+        const data = await api(`/api/rows?${params}`);
+        render(data);
+      } catch (error) {
+        showMessage(error.message, true);
+      }
+    }
+
+    async function saveRow(rowId) {
+      const inputs = [...tbody.querySelectorAll(`input[data-row="${rowId}"]`)];
+      const values = Object.fromEntries(inputs.map(input => [input.dataset.key, input.value]));
+      await api(`/api/rows/${rowId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sheet: currentSheet, values })
+      });
+      showMessage("Fila guardada en el Excel.");
+    }
+
+    uploadForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!fileInput.files.length) {
+        showMessage("Selecciona un Excel primero.", true);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+      try {
+        const data = await api("/api/upload", { method: "POST", body: formData });
+        searchInput.value = "";
+        render(data);
+        showMessage("Planilla cargada correctamente.");
+      } catch (error) {
+        showMessage(error.message, true);
+      }
+    });
+
+    searchButton.addEventListener("click", loadRows);
+    clearButton.addEventListener("click", () => {
+      searchInput.value = "";
+      loadRows();
+    });
+    searchInput.addEventListener("keydown", event => {
+      if (event.key === "Enter") loadRows();
+    });
+    sheetSelect.addEventListener("change", loadRows);
+
+    tbody.addEventListener("click", async event => {
+      const button = event.target.closest("button[data-save]");
+      if (!button) return;
+      button.disabled = true;
+      try {
+        await saveRow(button.dataset.save);
+      } catch (error) {
+        showMessage(error.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    tbody.addEventListener("input", event => {
+      const input = event.target.closest("input[data-row]");
+      if (!input) return;
+      const rowId = input.dataset.row;
+      window.clearTimeout(pendingTimers.get(rowId));
+      pendingTimers.set(rowId, window.setTimeout(async () => {
+        try {
+          await saveRow(rowId);
+        } catch (error) {
+          showMessage(error.message, true);
+        }
+      }, 1200));
+    });
+
+    api("/api/status")
+      .then(status => status.loaded ? loadRows() : null)
+      .catch(() => {});
+  </script>
+</body>
+</html>
