@@ -29,4 +29,8 @@ Los archivos cargados y backups quedan en el volumen `zoologic_data`.
 - Elegir la hoja.
 - Buscar por usuario o puesto.
 - Editar una fila desde la tabla si hace falta.
+- Usar `Conectar RD` cuando la fila tenga dato en la columna `Escritorio remoto`.
+- Copiar la password cuando la fila tenga dato en la columna `Password`.
 - Descargar el Excel actualizado.
+
+El boton `Conectar RD` genera un archivo `.rdp`. En Windows, al abrir ese archivo se inicia la conexion con Escritorio Remoto o Windows App si esta asociada a ese formato.

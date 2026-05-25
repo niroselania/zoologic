@@ -82,6 +82,10 @@
     .button:hover, button:hover { background: var(--accent-dark); }
     button.secondary { background: #475569; }
     button.secondary:hover { background: #334155; }
+    button.rdp { background: #047857; }
+    button.rdp:hover { background: #065f46; }
+    button.copy { background: #7c3aed; }
+    button.copy:hover { background: #6d28d9; }
     button:disabled { opacity: .55; cursor: not-allowed; }
 
     .layout {
@@ -252,6 +256,14 @@
       background: #fff;
     }
 
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      min-width: 260px;
+    }
+
     .empty {
       padding: 44px;
       text-align: center;
@@ -390,7 +402,14 @@
           const value = row.values[header.key] ?? "";
           return `<td><input type="text" data-row="${row.row_id}" data-key="${escapeAttr(header.key)}" value="${escapeAttr(value)}"></td>`;
         }).join("");
-        return `<tr>${cells}<td><button type="button" data-save="${row.row_id}">Guardar</button></td></tr>`;
+        const password = row.remote_desktop?.password ?? "";
+        const rdpButton = row.remote_desktop?.available
+          ? `<button class="rdp" type="button" data-rdp="${row.row_id}">Conectar RD</button>`
+          : "";
+        const copyButton = password
+          ? `<button class="copy" type="button" data-copy-password="${escapeAttr(password)}">Copiar password</button>`
+          : "";
+        return `<tr>${cells}<td><div class="actions"><button type="button" data-save="${row.row_id}">Guardar</button>${rdpButton}${copyButton}</div></td></tr>`;
       }).join("");
     }
 
@@ -447,6 +466,25 @@
     sheetSelect.addEventListener("change", loadRows);
 
     tbody.addEventListener("click", async event => {
+      const rdpButton = event.target.closest("button[data-rdp]");
+      if (rdpButton) {
+        const params = new URLSearchParams({ sheet: currentSheet });
+        window.location.href = `/api/rdp/${rdpButton.dataset.rdp}?${params}`;
+        showMessage("Abriendo conexion RD. Si el navegador descarga el archivo, abrilo para conectar.");
+        return;
+      }
+
+      const copyButton = event.target.closest("button[data-copy-password]");
+      if (copyButton) {
+        try {
+          await navigator.clipboard.writeText(copyButton.dataset.copyPassword);
+          showMessage("Password copiada al portapapeles.");
+        } catch {
+          showMessage(`Password: ${copyButton.dataset.copyPassword}`);
+        }
+        return;
+      }
+
       const button = event.target.closest("button[data-save]");
       if (!button) return;
       button.disabled = true;

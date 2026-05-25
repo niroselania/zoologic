@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import unicodedata
+from io import BytesIO
 from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
@@ -107,6 +108,30 @@ def searchable_headers(headers: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return matches
 
 
+def header_matches(header: dict[str, Any], *terms: str) -> bool:
+    label = normalize_text(header["label"])
+    return all(term in label for term in terms)
+
+
+def find_header(headers: list[dict[str, Any]], *terms: str) -> dict[str, Any] | None:
+    for header in headers:
+        if header_matches(header, *terms):
+            return header
+    return None
+
+
+def row_remote_info(headers: list[dict[str, Any]], values: dict[str, Any]) -> dict[str, Any]:
+    remote_header = find_header(headers, "escritorio", "remoto")
+    password_header = find_header(headers, "password") or find_header(headers, "contrasena")
+    remote_value = values.get(remote_header["key"]) if remote_header else None
+    password_value = values.get(password_header["key"]) if password_header else None
+    return {
+        "available": bool(str(remote_value or "").strip()),
+        "address": remote_value,
+        "password": password_value,
+    }
+
+
 def preferred_sheet_name(workbook) -> str:
     for sheet in workbook.worksheets:
         header_row = detect_header_row(sheet)
@@ -153,7 +178,13 @@ def rows_from_sheet(sheet_name: str | None = None, search: str = "") -> dict[str
                 if search_key not in haystack:
                     continue
 
-            rows.append({"row_id": row_number, "values": values})
+            rows.append(
+                {
+                    "row_id": row_number,
+                    "values": values,
+                    "remote_desktop": row_remote_info(headers, values),
+                }
+            )
 
         return {
             "filename": CURRENT_FILE.name,
@@ -267,6 +298,57 @@ def update_row(row_id: int):
 
         workbook.save(CURRENT_FILE)
         return jsonify({"ok": True})
+    finally:
+        workbook.close()
+
+
+@app.get("/api/rdp/<int:row_id>")
+def rdp_file(row_id: int):
+    sheet_name = request.args.get("sheet")
+
+    try:
+        workbook = open_workbook()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 404
+
+    try:
+        selected_sheet = sheet_name if sheet_name in workbook.sheetnames else preferred_sheet_name(workbook)
+        sheet = workbook[selected_sheet]
+        header_row = detect_header_row(sheet)
+        headers = read_headers(sheet, header_row)
+
+        if row_id <= header_row or row_id > sheet.max_row:
+            return jsonify({"error": "La fila indicada no existe."}), 404
+
+        values = {
+            header["key"]: serialize_value(sheet.cell(row_id, header["column"]).value)
+            for header in headers
+        }
+        remote_info = row_remote_info(headers, values)
+        address = str(remote_info["address"] or "").strip()
+        if not address:
+            return jsonify({"error": "Esta fila no tiene dato en Escritorio remoto."}), 404
+
+        username_header = find_header(headers, "usuario") or find_header(headers, "persona")
+        username = str(values.get(username_header["key"]) or "").strip() if username_header else ""
+        rdp_lines = [
+            "screen mode id:i:2",
+            "use multimon:i:0",
+            "desktopwidth:i:1920",
+            "desktopheight:i:1080",
+            "session bpp:i:32",
+            "prompt for credentials:i:1",
+            "authentication level:i:2",
+            f"full address:s:{address}",
+        ]
+        if username:
+            rdp_lines.append(f"username:s:{username}")
+
+        payload = "\r\n".join(rdp_lines) + "\r\n"
+        stream = BytesIO(payload.encode("utf-16le"))
+        safe_name = "".join(char for char in address if char.isalnum() or char in ("-", "_", ".")).strip(".")
+        filename = f"zoologic_{safe_name or row_id}.rdp"
+        return send_file(stream, mimetype="application/rdp", as_attachment=True, download_name=filename)
     finally:
         workbook.close()
 
