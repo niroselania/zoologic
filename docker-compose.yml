@@ -8,5 +8,22 @@ services:
       - zoologic_data:/app/data
     restart: unless-stopped
 
+  zoologic-bot:
+    build: .
+    container_name: zoologic-bot
+    command: ["python", "bot.py"]
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      ALLOWED_CHAT_IDS: ${ALLOWED_CHAT_IDS:-}
+      SEARCH_FIELDS: ${SEARCH_FIELDS:-sector,usuario,ubicacion}
+      SHOW_PASSWORD: ${SHOW_PASSWORD:-0}
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+    volumes:
+      # mismo volumen que el sitio: el bot lee la planilla viva (solo lectura)
+      - zoologic_data:/app/data:ro
+    depends_on:
+      - zoologic-consulta
+    restart: unless-stopped
+
 volumes:
   zoologic_data:

@@ -10,9 +10,10 @@ Subir estos archivos a un repositorio Git o a una carpeta del servidor:
 Dockerfile
 docker-compose.yml
 app.py
+bot.py
 requirements.txt
 templates/index.html
-.dockerignore
+.env.example
 ```
 
 El stack publica la app en el puerto `8100`:
@@ -41,3 +42,29 @@ Los archivos cargados y backups quedan en el volumen `zoologic_data`.
 El boton `Conectar RD` genera un archivo `.rdp`. En Windows, al abrir ese archivo se inicia la conexion con Escritorio Remoto o Windows App si esta asociada a ese formato.
 
 El historial se guarda en `/app/data/historial_cambios.jsonl`, dentro del volumen `zoologic_data`.
+
+## Bot de Telegram (integrado)
+
+El stack levanta dos servicios que comparten el mismo volumen `zoologic_data`:
+
+- `zoologic-consulta`: el sitio web.
+- `zoologic-bot`: el bot de Telegram. Lee directamente `zoologic_actual.xlsx` (la planilla que se sube y edita desde el sitio), asi que siempre responde con la version actual. Si la planilla cambia, el bot lo detecta solo en la proxima consulta; no hay que subir nada aparte ni usar `/recargar`.
+
+### Variables en Portainer (Stack > Environment variables)
+
+| Variable | Descripcion |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | Token de @BotFather (obligatorio). |
+| `ALLOWED_CHAT_IDS` | chat_id autorizados, separados por coma. Si queda vacio el bot rechaza a todos. |
+| `SEARCH_FIELDS` | Campos donde busca (default `sector,usuario,ubicacion`). |
+| `SHOW_PASSWORD` | `1` para que el bot muestre la columna Password (default oculto). |
+
+Primer arranque: desplegar con `ALLOWED_CHAT_IDS` vacio, escribirle `/id` al bot, copiar el numero a `ALLOWED_CHAT_IDS` y redesplegar.
+
+### Uso
+
+Escribirle al bot un sector, usuario o ubicacion (ej: `ariel`, `remoto`, `suipacha`). Responde con la linea completa de cada coincidencia (sin distinguir mayusculas ni tildes) y la fecha de ultima modificacion de la planilla.
+
+Comandos: `/estado` (fecha y filas de la planilla), `/cambios` (ultimos cambios hechos desde el sitio), `/id`.
+
+Importante: usar el bot en un solo lugar. Si el bot viejo (systemd) sigue corriendo con el mismo token, Telegram da error de conflicto; hay que detenerlo (`sudo systemctl disable --now zoologic-bot`).
