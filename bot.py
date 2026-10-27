@@ -146,7 +146,7 @@ def buscar(texto: str) -> tuple[list[dict[str, Any]], dict[str, Any], tuple[floa
 
 def _es_password(label: str) -> bool:
     t = site.normalize_text(label)
-    return "password" in t or "contrasena" in t or "clave" in t
+    return "password" in t or "contrasena" in t
 
 
 def _valor(v: Any) -> str:
