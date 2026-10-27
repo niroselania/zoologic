@@ -68,3 +68,16 @@ Escribirle al bot un sector, usuario o ubicacion (ej: `ariel`, `remoto`, `suipac
 Comandos: `/estado` (fecha y filas de la planilla), `/cambios` (ultimos cambios hechos desde el sitio), `/id`.
 
 Importante: usar el bot en un solo lugar. Si el bot viejo (systemd) sigue corriendo con el mismo token, Telegram da error de conflicto; hay que detenerlo (`sudo systemctl disable --now zoologic-bot`).
+
+## Bot de Discord (opcional)
+
+Servicio `zoologic-discord`, mismo funcionamiento que el de Telegram (lee la planilla viva del sitio).
+
+| Variable | Descripcion |
+|---|---|
+| `DISCORD_BOT_TOKEN` | Token del bot (Developer Portal > Bot). Obligatorio. |
+| `DISCORD_ALLOWED_USER_IDS` | IDs de usuario autorizados, separados por coma. Si queda vacio rechaza a todos. |
+| `DISCORD_CHANNEL_IDS` | Opcional: limita los canales donde responde (siempre responde por mensaje directo). |
+
+Requiere activar "Message Content Intent" en el Developer Portal. Comandos: `!id`, `!estado`, `!cambios`.
+Si no usas Telegram, borra el bloque `zoologic-bot` del compose (y viceversa).

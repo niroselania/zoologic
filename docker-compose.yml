@@ -25,5 +25,22 @@ services:
       - zoologic-consulta
     restart: unless-stopped
 
+  zoologic-discord:
+    build: .
+    container_name: zoologic-discord
+    command: ["python", "discord_bot.py"]
+    environment:
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_ALLOWED_USER_IDS: ${DISCORD_ALLOWED_USER_IDS:-}
+      DISCORD_CHANNEL_IDS: ${DISCORD_CHANNEL_IDS:-}
+      SEARCH_FIELDS: ${SEARCH_FIELDS:-sector,usuario,ubicacion}
+      SHOW_PASSWORD: ${SHOW_PASSWORD:-0}
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+    volumes:
+      - zoologic_data:/app/data:ro
+    depends_on:
+      - zoologic-consulta
+    restart: unless-stopped
+
 volumes:
   zoologic_data:
