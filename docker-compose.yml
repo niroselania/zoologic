@@ -17,6 +17,8 @@ services:
       ALLOWED_CHAT_IDS: ${ALLOWED_CHAT_IDS:-}
       SEARCH_FIELDS: ${SEARCH_FIELDS:-sector,usuario,ubicacion}
       SHOW_PASSWORD: ${SHOW_PASSWORD:-0}
+      WHISPER_URL: ${WHISPER_URL:-}
+      WHISPER_TOKEN: ${WHISPER_TOKEN:-}
       TZ: ${TZ:-America/Argentina/Buenos_Aires}
     volumes:
       # mismo volumen que el sitio: el bot lee la planilla viva (solo lectura)
@@ -35,6 +37,8 @@ services:
       DISCORD_CHANNEL_IDS: ${DISCORD_CHANNEL_IDS:-}
       SEARCH_FIELDS: ${SEARCH_FIELDS:-sector,usuario,ubicacion}
       SHOW_PASSWORD: ${SHOW_PASSWORD:-0}
+      WHISPER_URL: ${WHISPER_URL:-}
+      WHISPER_TOKEN: ${WHISPER_TOKEN:-}
       TZ: ${TZ:-America/Argentina/Buenos_Aires}
     volumes:
       - zoologic_data:/app/data:ro

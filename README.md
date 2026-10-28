@@ -81,3 +81,11 @@ Servicio `zoologic-discord`, mismo funcionamiento que el de Telegram (lee la pla
 
 Requiere activar "Message Content Intent" en el Developer Portal. Comandos: `!id`, `!estado`, `!cambios`.
 Si no usas Telegram, borra el bloque `zoologic-bot` del compose (y viceversa).
+
+## Busqueda por voz (opcional)
+
+Con el servicio Whisper instalado (stack aparte `whisper`), se puede mandar un mensaje de voz al bot de Telegram o de Discord y lo transcribe y busca como si fuera texto ("busca ariel").
+
+1. Desplegar el stack `whisper` y anotar su direccion, por ejemplo `http://IP-DEL-SERVIDOR:9000`.
+2. En este stack agregar `WHISPER_URL` (esa direccion) y `WHISPER_TOKEN` (la misma clave del stack whisper) y redesplegar reconstruyendo la imagen.
+3. Mandar un mensaje de voz de hasta 60 segundos (`VOZ_MAX_SECONDS`). El bot responde "Entendi: ..." y los resultados.

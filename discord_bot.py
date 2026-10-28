@@ -18,6 +18,7 @@ Comandos: !id  !estado  !cambios
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import sys
@@ -27,6 +28,7 @@ import discord
 
 import app as site
 import bot as core  # lectura de planilla y búsqueda compartidas
+import voz
 
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
 
@@ -105,7 +107,8 @@ async def on_message(message: discord.Message):
     if not es_dm and CHANNEL_IDS and message.channel.id not in CHANNEL_IDS:
         return
     texto = (message.content or "").strip()
-    if not texto:
+    audio = next((a for a in message.attachments if (a.content_type or "").startswith("audio/")), None)
+    if not texto and audio is None:
         return
 
     if texto.lower() == "!id":
@@ -116,8 +119,19 @@ async def on_message(message: discord.Message):
             await responder(message, f"No estás autorizado. Pasale este ID al administrador: {message.author.id}")
         return
 
-    cmd = texto.lower()
     try:
+        if not texto and audio is not None:  # mensaje de voz / audio adjunto
+            if not voz.habilitado():
+                return await responder(message, "La búsqueda por voz no está configurada. Escribime la consulta.")
+            if audio.size > voz.MAX_BYTES:
+                return await responder(message, "El audio es demasiado pesado.")
+            async with message.channel.typing():
+                transcripto = await asyncio.to_thread(voz.transcribir, await audio.read())
+            texto = voz.limpiar_consulta(transcripto)
+            if not texto:
+                return await responder(message, "No pude entender el audio. Probá de nuevo, hablando cerca y más despacio.")
+            await responder(message, f"🎙 Entendí: «{discord.utils.escape_markdown(transcripto)}»")
+        cmd = texto.lower()
         if cmd == "!estado":
             data, sig = core.get_data()
             return await responder(
@@ -146,6 +160,8 @@ async def on_message(message: discord.Message):
             rows, data, sig = core.buscar(texto)
         for msg in armar_mensajes(rows, data, sig):
             await responder(message, msg)
+    except voz.VozError as e:
+        await responder(message, str(e))
     except Exception as e:
         logger.exception("Error procesando mensaje")
         await responder(message, f"Ocurrió un error: {e}")

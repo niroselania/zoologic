@@ -20,6 +20,7 @@ Variables de entorno:
 
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 import os
@@ -34,6 +35,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 
 # Reutiliza la lógica del sitio (lectura de planilla, detección de encabezados)
 import app as site
+import voz
 
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 SHOW_PASSWORD = os.environ.get("SHOW_PASSWORD", "0").strip() == "1"
@@ -228,7 +230,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Siempre consulto la planilla actual del sitio, no hace falta recargar nada.\n\n"
         "/estado - fecha de la planilla y cantidad de filas\n"
         "/cambios - últimos cambios hechos desde el sitio\n"
-        "/id - muestra tu chat_id"
+        "/id - muestra tu chat_id\n\n"
+        "También podés mandarme un mensaje de voz (ej: «buscá ariel»)."
     )
 
 
@@ -265,16 +268,48 @@ async def cmd_cambios(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await update.message.reply_text(texto, parse_mode=ParseMode.HTML)
 
 
+async def _responder_busqueda(update: Update, texto: str) -> None:
+    try:
+        rows, data, sig = buscar(texto)
+    except Exception as e:
+        logger.exception("Error buscando")
+        await update.message.reply_text(f"Ocurrió un error buscando: {e}")
+        return
+    for msg in armar_mensajes(rows, data, sig):
+        await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+
+
 async def manejar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _autorizado(update):
         return await _rechazar(update)
+    await _responder_busqueda(update, update.message.text or "")
+
+
+async def manejar_voz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Mensaje de voz o audio: se transcribe con Whisper y se busca como si fuera texto."""
+    if not _autorizado(update):
+        return await _rechazar(update)
+    if not voz.habilitado():
+        return await update.message.reply_text("La búsqueda por voz no está configurada. Escribime la consulta.")
+    audio = update.message.voice or update.message.audio
+    if (audio.duration or 0) > voz.MAX_SECONDS:
+        return await update.message.reply_text(f"El audio es muy largo (máximo {voz.MAX_SECONDS} segundos).")
+    if (audio.file_size or 0) > voz.MAX_BYTES:
+        return await update.message.reply_text("El audio es demasiado pesado.")
     try:
-        rows, data, sig = buscar(update.message.text or "")
-    except Exception as e:
-        logger.exception("Error buscando")
-        return await update.message.reply_text(f"Ocurrió un error buscando: {e}")
-    for msg in armar_mensajes(rows, data, sig):
-        await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+        archivo = await audio.get_file()
+        datos = bytes(await archivo.download_as_bytearray())
+        transcripto = await asyncio.to_thread(voz.transcribir, datos)
+    except voz.VozError as e:
+        return await update.message.reply_text(str(e))
+    except Exception:
+        logger.exception("Error con el audio")
+        return await update.message.reply_text("No pude procesar ese audio. Probá de nuevo o escribime la consulta.")
+    consulta = voz.limpiar_consulta(transcripto)
+    if not consulta:
+        return await update.message.reply_text("No pude entender el audio. Probá de nuevo, hablando cerca y más despacio.")
+    await update.message.reply_text(f"🎙 Entendí: «{transcripto}»")
+    await _responder_busqueda(update, consulta)
 
 
 def main() -> None:
@@ -288,6 +323,7 @@ def main() -> None:
     tg.add_handler(CommandHandler("estado", cmd_estado))
     tg.add_handler(CommandHandler("cambios", cmd_cambios))
     tg.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, manejar_texto))
+    tg.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, manejar_voz))
     logger.info("Bot iniciado. Esperando mensajes...")
     tg.run_polling()
 
